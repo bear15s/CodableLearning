@@ -16,6 +16,10 @@ enum FlightRules:String,Codable{
 struct Aircraft:Codable{
     var identification:String
     var color:String
+}
+
+struct FlightPlan:Codable{
+    var aircraft:Aircraft
     var flightRules:FlightRules
     var route:[String]
     
@@ -31,9 +35,9 @@ struct Aircraft:Codable{
     
     var remarks:String?
     
+    //MARK: - 这里很恶心的是，即使是只有要取别名的属性要单独解析，也要把所有属性一一写全在CodingKeys里面
     private enum CodingKeys:String,CodingKey{
-        case identification
-        case color
+        case aircraft
         case flightRules = "flight_rules"
         case route
         case departureDate = "departure_time"
@@ -41,24 +45,89 @@ struct Aircraft:Codable{
     }
 }
 
+
+
+struct Route:Decodable{
+    struct Airport: Decodable {
+        var code: String
+        var name: String
+    }
+    
+    var points:[Airport]
+   
+    private struct CodingKeys: CodingKey {
+        var stringValue: String
+        
+        var intValue: Int? {
+            return nil
+        }
+        
+        init?(stringValue: String) {
+            self.stringValue = stringValue
+        }
+        
+        init?(intValue: Int) {
+            return nil
+        }
+        
+        static let points =
+            CodingKeys(stringValue: "points")!
+    }
+    
+    //MARK: - 未知Keys类型真的是坑
+    public init(from coder: Decoder) throws {
+        let container = try coder.container(keyedBy: CodingKeys.self)
+        
+//        var points: [Airport] = []
+        //先将points转化成[String]类型
+        let codes:[String] = try container.decode([String].self, forKey: .points)
+        
+        let points:[Airport] = try codes.map { (code) -> Airport in
+            let key = CodingKeys(stringValue: code)!
+            let airport = try container.decode(Airport.self, forKey: key)
+            return airport
+        }
+        
+//      for code in codes {
+//         let key = CodingKeys(stringValue: code)!
+//         let airport = try container.decode(Airport.self, forKey: key)
+//         points.append(airport)
+//      }
+        self.points = points
+    }
+}
+
 class ViewController: UIViewController {
 
     let json = """
     {
-    "aircraft": {
-        "identification": "NA12345",
-        "color": "Blue/White"
-    },
-    "route": ["KTTD", "KHIO"],
-    "departure_time": {
-        "proposed": "2018-04-20T14:15:00-0700",
-        "actual": "2018-04-20T14:20:00-0700"
-    },
-    "flight_rules": "IFR",
-    "remarks": null
-}
-""".data(using: .utf8)!
+        "aircraft": {
+            "identification": "NA12345",
+            "color": "Blue/White"
+        },
+        "route": ["KTTD", "KHIO"],
+        "departure_time": {
+            "proposed": "2018-04-20T14:15:00-0700",
+            "actual": "2018-04-20T14:20:00-0700"
+        },
+        "flight_rules": "IFR",
+        "remarks": null
+    }
+    """.data(using: .utf8)!
     
+    let json2 = """
+    {
+        "points": ["KSQL", "KWVI"],
+        "KSQL": {
+            "code": "KSQL",
+            "name": "San Carlos Airport"
+        },
+        "KWVI": {
+            "code": "KWVI",
+            "name": "Watsonville Municipal Airport"
+        }
+    }
+    """.data(using: .utf8)!
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -66,11 +135,20 @@ class ViewController: UIViewController {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         do {
-            let airplan1 = try decoder.decode(Aircraft.self,from:json)
-            print("airplan = \(airplan1)")
+//            let airplan1 = try decoder.decode(FlightPlan.self,from:json)
+            let point1:Route =  try decoder.decode(Route.self,from:json2)
+            
+            for point in point1.points{
+                print("name = \(point.name),code = \(point.code)")
+            }
+            
+            let p1name = point1.points[0].name
+            print("name = \(p1name)")
+            
         }catch{
             print("error = \(error)")
         }
+ 
     }
 
     override func didReceiveMemoryWarning() {
